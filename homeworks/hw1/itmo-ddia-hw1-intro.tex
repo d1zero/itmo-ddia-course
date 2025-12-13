@@ -47,9 +47,9 @@
     Жесткий дедлайн: Сб, 29.11.2025, 23:59 МСК
 }
 \author{
-    \color{red}{Имя Фамилия} \\
+    \color{red}{Александр Тимофеев} \\
     \normalsize
-    DDIA25-HW1-{\color{red}NameSurname}.pdf
+    DDIA25-HW1-{\color{red}AleksandrTimofeev}.pdf
 }
 
 \maketitle
@@ -111,30 +111,48 @@
 	
 	\begin{tabular}{ |p{4cm}|p{11cm}|  } \hline
 		\textit{\href{https://www.ibm.com/think/insights/observability-pillars}{<<Observability Pillar>>}} & Характеристика               \\ \hline
-		                                                                                                   &                              \\ \hline
-		                                                                                                   &                              \\ \hline
-		                                                                                                   &                              \\ \hline
+		  Metrics(метрики)                                                                                  &
+        Числовые показатели системы во времени для создания сводного представления, которое будет использовано различными средствами визуализации
+                                                                                                            \\ \hline
+		  Logs(логи)                                                                                         &
+        Неизменяемые записи об отдельных событиях в системе. Помогают диагностировать ошибки и анализировать системные сбои.
+                                                                                                          \\ \hline
+        Traces(трейсы)
+		                                                                                                   &              
+        Трассировки, сочетающие в себе некоторые функции метрик и журналов, фиксируя и отображая сквозное прохождение запроса, его путь и жизненный цикл каждого компонента обработчика этого запроса. Помимо всего, может включать в себя логи. Помогает понимать сколько занимает каждый этап обработки запроса, а также конкретное место возникновения событий и проблем                                                                                                   
+                                                                                                           \\ \hline
 	\end{tabular}
 	
 	\bigbreak
 	
 	\begin{tabular}{ |p{4cm}|p{8cm}|p{2cm}|  } \hline
-		\textit{\href{https://sre.google/sre-book/monitoring-distributed-systems/}{<<Golden Signal>>}} & Пример метрики & Единица измерения    \\ \hline
-		                                                                                               &                             &                                   \\ \hline
-		                                                                                               &                             &                                   \\ \hline
-		                                                                                               &                             &                                   \\ \hline
-		                                                                                               &                             &                                   \\ \hline
+		\textit{\href{https://sre.google/sre-book/monitoring-distributed-systems/}{<<Golden Signal>>}}   & Пример метрики 			 & Единица измерения    	\\ \hline
+		Latency(задержка) & Время обработки запроса. Изменяерется для перцентилей &
+        миллисекунды (ms) 		\\ \hline
+		Traffic(трафик) & Количество запросов, обрабатываемых в секунду                       						     & запросы в секунду (rps) 	\\ \hline
+		Errors(ошибки)  & Доля неуспешных запросов(5хх) от общего числа запросов         						     	 & проценты (\%) 			\\ \hline
+		Saturation(насыщенность) & Процент использования CPU сервера от его максимальных возможностей                       						     & проценты (\%) 			\\ \hline
 	\end{tabular}
 	
 	\bigbreak
 	
 	\begin{tabular}{ |p{4cm}|p{11cm}|  } \hline
 		\href{https://en.wikipedia.org/wiki/High_availability}{Метрика доступности} & Описание \\ \hline
-		Uptime (\%)                                                                                   &                  \\ \hline
-		Downtime (s)                                                                                  &                  \\ \hline
-		MTBF (s)                                                                                      &                  \\ \hline
-		MTTR (s)                                                                                      &                  \\ \hline
-		MTTD (s)                                                                                      &                  \\ \hline
+		Uptime (\%)                                                                                   &                  
+        Период функционирования и доступности системы
+        \\ \hline
+		Downtime (s)                                                                                  &                  
+        Период недоступности системы для пользователей
+        \\ \hline
+		MTBF (s)                                                                                      &                  
+        Среднее время между сбоями системы, показывающее примерное время работы до следующего сбоя
+        \\ \hline
+		MTTR (s)                                                                                      & 
+        Среднее время восстановления системы после внепланового сбоя или отказа
+        \\ \hline
+		MTTD (s)                                                                                      &
+        Среднее время от начала инцидента до момента его обнаружения
+        \\ \hline
 	\end{tabular}
 	
 \end{solution}
@@ -194,7 +212,30 @@ RPS-счётчики (\texttt{rate}) и перцентили (\texttt{percentile
 \end{problem}
 
 \begin{solution}
+	1. Проблема в усреднении перцентилей - это не даёт полной картины и корретной оценки по пользователям. При 99 перцентиле наличие хотя бы 2\% пользователей с высоким временем ответа(допустим 500мс при 100мс "нормальных") уже будет влиять на этот самый перцентиль. И даже если в других зонах всё нормально, то 2\% пользователей в одной зоне будет влиять и на все остальные, что может вводить в заблуждение по общей производительности сервиса.
+    
+    2. Допустим, зона Х имеет 30\% трафика(вес при подсчёте 0.3). Если зоны две, то взвешенный 99 перцентиль будет 220мс(500*0.3(зона Х)+100*0.7(зона Y)). Это чуть лучше, чем обычное усреднение, но всё равно не отражает реальную картину
 	
+    3. Для более реального отображения ситуации в системе стоит сделать агрегацию по каждой зоне
+	\begin{minted}{promql}
+	avg by (cloud_dc) 
+    (monad{
+		cloud_dc=~".*",
+		path="//monolith/web/http_requests/timings",
+		field="p99",
+		type="quantile"
+	})
+
+	sum by (cloud_dc) 
+    (monad{
+		cloud_dc=~".*",
+		path="//monolith/web/http_requests/requests",
+		field="1",
+		type="rate"
+	})
+	\end{minted}
+
+	4. -
 \end{solution}
 
 \break
@@ -249,7 +290,45 @@ $$(20 < 300) \vee \text{WARN} = \text{OK} :: state $$
 \end{problem}
 
 \begin{solution}
-	
+	\begin{enumerate}
+	    \item $ (T_{99\%}(S_1) < 200 \vee \text{WARN}) \wedge (T_{99\%}(S_1) < 300)  :: state $
+        \item Scalar = vector. State = vector со значениями 0-3(UNK, CRIT, WARN, OK). В Grafana Stat цвет можно задать по значениями: 3 - зелёный, 2 - жёлтый, 1 - красный, 0 - серый.
+        \item Вместо $\vee$ - OR, вместо $\wedge$ - AND
+        \item SLO1: Использование RAM должно быть больше 80 для WARN и больше 90 для CRIT(Figure 1)
+            \begin{itemize}
+                \item PromQL: $ node\_memory\_MemAvailable\_bytes / node\_memory\_MemTotal\_bytes * 100 $
+                \item Терм: $ (RAM\_usage < 90) \wedge (RAM\_usage < 80 \vee \text{WARN}) :: state $
+\begin{figure}
+                \centering
+                \includegraphics[width=0.75\linewidth]{1.3.4.png}
+                \caption{Измеритель \% использованной RAM}
+                \label{fig:placeholder}
+            \end{figure}
+                        \end{itemize}
+        \item SLO2: Использование памяти должно быть больше 75 для WARN и больше 85 для CRIT(Figure 2)
+            \begin{itemize}
+                \item PromQL: $ ((node\_filesystem\_size\_bytes{mountpoint="/var", fstype!="rootfs"} - node\_filesystem\_avail\_bytes{ mountpoint="/var", fstype!="rootfs"}) / node\_filesystem\_size\_bytes{ mountpoint="/var", fstype!="rootfs"} ) * 100 $
+                \item Терм: $ (MEM\_usage < 85) \wedge (MEM\_usage < 75 \vee \text{WARN}) :: state $
+\begin{figure}
+                \centering
+                \includegraphics[width=0.75\linewidth]{1.3.5.png}
+                \caption{Измеритель \% использованной памяти корневого раздела системы}
+                \label{fig:placeholder}
+            \end{figure}
+                        \end{itemize}
+        \item SLO3: Использование SWAP должно быть больше 20 для WARN и больше 40 для CRIT(Figure 3)(Swap не используется, потому что не используется даже 50\% RAM)
+            \begin{itemize}
+                \item PromQL: $ (
+      ((node\_memory\_SwapTotal\_bytes - node\_memory\_SwapFree\_bytes) / (node\_memory\_SwapTotal\_bytes)) * 100 $
+                \item Терм: $ (MEM\_usage < 40) \wedge (MEM\_usage < 20 \vee \text{WARN}) :: state $
+                                \begin{figure}
+            	    \centering
+            	    \includegraphics[width=0.5\linewidth]{1.3.6.png}
+            	    \caption{Измеритель \% использованной SWAP-памяти}
+            	    \label{fig:placeholder}
+            	\end{figure}
+            \end{itemize}
+		\end{enumerate}
 \end{solution}
 
 \break
@@ -281,7 +360,11 @@ SRE-команда \textit{Монокля} доказала свою компе�
 \end{problem}
 
 \begin{solution}
-	
+    \begin{itemize}
+    	\item Если есть сложные запросы, которые используются на нескольких панелях, то предварительное вычисление с помощью Recording Rules может значительно сократить время загрузки. Для критических оповещений, которые зависят от сложных вычислений, Recording Rules гарантируют, что необходимые данные всегда доступны.
+        \item -
+        \item Необходимо следить за актуальностью recording rules(больше аргументы в голову не идут)
+    \end{itemize}
 \end{solution}
 
 \break
@@ -306,7 +389,21 @@ SRE-команда \textit{Монокля} доказала свою компе�
 \end{problem}
 
 \begin{solution}
+	По закону Амдала, ускорение программы $S(n)$ при использовании $n$ ядер, вычисляется по формуле:
+	\[ S(n) = \frac{1}{(1 - p) + \frac{p}{n} + \beta(n)} \]
+	где $p$ - доля параллельного кода, а $\beta(n)$ - накладные расходы на распараллеливание. Т.к. доля последовательного кода $\alpha = 0.001$, значит доля параллельного кода $p = 1 - \alpha = 0.999$.
 	
+    1. Следовательно, для первой реализации с $\beta(n) = 0.0001n$:
+	\[ S(n) = \frac{1}{0.001 + \frac{0.999}{n} + 0.0001n} \]
+	Для нахождения максимального ускорения необходимо найти производную от $S(n)$ по $n$ и приравнять к нулю:
+	\[ \frac{dS}{dn} = 0 \]
+	Решив данное уравнение, получаем, что оптимальное число ядер для первой реализации $n = 100$.
+
+	2. Для второй реализации с $\beta(n) = 0.0005 \cdot \ln(n)$:
+	\[ S(n) = \frac{1}{0.001 + \frac{0.999}{n} + 0.0005 \cdot \ln(n)} \]
+	Как и выше, находим производную $S(n)$ по $n$ и приравниваем её к нулю:
+	\[ \frac{dS}{dn} = 0 \]
+	Решив данное уравнение, получаем, что оптимальное число ядер для второй реализации $n \approx 2000$.
 \end{solution} 
 
 \break
@@ -326,7 +423,57 @@ SRE-команда \textit{Монокля} доказала свою компе�
 \end{problem}
 
 \begin{solution}
-	
+Выбранная система: Uber (система транспортировки людей в реальном времени).
+1. Архитектура и компоненты:
+\begin{itemize}
+	\item Веб-интерфейс: Uber использует Fusion.js(создан ими на базе React.JS) для создания надежных веб-приложений. Также разрабатывают visualization.js для сценариев геопространственной визуализации.
+    \item Мобильная часть: Uber создает кроссплатформенную платформу RIB с использованием архитектуры VIPER вместо MVC. Эта архитектура может работать с разными языками: Swift для iOS и Java для Android.
+    \item Сервисная сеть: Uber создала Uber Gateway в виде динамической конфигурации поверх NGINX. Сервис использует gRPC и QUIC для взаимодействия клиент-сервер, а также Apache Thrift.
+    \item Сервисная сторона: Uber создала унифицированное хранилище конфигураций под названием Flipr, H3 - библиотеку для хранения индексов местоположения. Используют Spring Boot для сервисов на Java, uAct для event-driven архитектуры, и Cadence для асинхронной организации рабочих процессов.
+    \item База данных: в OLTP в основном используется строго согласованный DocStore, который использует MySQL и PostgreSQL, а также движок базы данных RocksDB.
+    \item Большие данные: управляются с помощью семейства Hadoop. В качестве форматов файлов используются Hudi и Parquet, а в качестве кэша используется Alluxio. Данные временных рядов хранятся в Pinot и AresDB.
+    \item Обработка данных: Hive, Spark и платформа для обработки данных с открытым исходным кодом Marmaray. В состав промежуточного программного обеспечения для обмена сообщениями и потоковой передачи данных входят Apache Kafka и Apache Flink.
+    \item На стороне DevOps: Uber использует Monorepo с упрощенной средой разработки devpod. Управление непрерывной доставкой осуществляется через Netflix Spinnaker, метрики передаются в uMetric, сигналы тревоги - в uMonitor, а база данных M3 обеспечивает постоянную наблюдаемость..
+
+    Оценка нагрузки и гарантии:
+    \item Throughput: Около 30–35 миллионов поездок в день (11.2 млрд поездок в 2023, 11.3 млрд в 2024), что соответствует ~350–400 поездкам в секунду в среднем. Пиковый throughput для запросов на поездки — до 5000 RPS. Для обновлений локаций (водители отправляют каждые 3 секунды) — миллионы событий в секунду с учетом ~6–8 млн активных водителей.
+    \item Latency: P99 latency для критических операций (matching, API calls) — ~10–200 мс. SLA обычно подразумевает <100 мс для 99.9\% запросов на realtime операции.
+    \item Количество пользователей: ~180 миллионов активных пользователей ежемесячно в 2025, с ~150 млн в Q4 2023. ~20–30 млн активных пользователей ежедневно, с учетом роста.
+    \item Объем хранимых данных: десятки петабайт в DocStore для OLTP, более 100 петабайт аналитических данных в Hadoop. Kafka обрабатывает ~7.7 петабайт в день (89 гигабайт в секунду).
+
+    Комментарий:
+    Эти цифры основаны на публичных отчетах Uber и инженерных блогах. Throughput и latency приблизительные, так как реальные пики могут быть выше; Uber использует auto-scaling для пиков. Количество пользователей растет ~10–20\%, но зависит от регионов.
+\end{itemize}
+
+2. Потенциальные bottlenecks:
+\begin{itemize}
+	\item В сервисах matching(используя H3 для индексации), bottleneck может возникнуть при пиковом трафике , когда миллионы обновлений локаций водителей и клиентов перегружают Kafka стриминг, что может приводить к задержкам в поиске водителей.
+	\item Высокий объем записей (новые поездки, обновления статусов) может привести к lock contention или replication lag в шaрдированных кластерах, особенно если шардинг не оптимален.
+	\item Сильная согласованность в DocStore замедляет операции при распределенных транзакциях.
+\end{itemize}
+
+3. Метрики и SLO:
+\begin{itemize}
+	\item Matching и геолокация:
+		\begin{itemize}
+			\item Latency matching-запросов
+			\item SLO: Latency matching-запросов должен быть <200мс.
+			\item Реагирование: Auto-scaling Kafka-кластеров, Rate-limit на некритичные запросы.
+		\end{itemize}
+	\item Масштабирование микросервисов:
+		\begin{itemize}
+			\item RPS на service mesh
+			\item SLO: RPS на service mesh должен быть меньше 5000.
+			\item Реагирование: Auto-scaling подов в K8S, Load shedding(прерывание запросов с низким приоритетом).
+		\end{itemize}
+	\item СУБД:
+		\begin{itemize}
+			\item Write latency в DocStore
+			\item SLO: Write latency для DocStore должен быть < 50мс.
+			\item Реагирование: Авто-шардирование и балансировка.
+		\end{itemize}
+\end{itemize}
+
 \end{solution} 
  
 \end{document}
