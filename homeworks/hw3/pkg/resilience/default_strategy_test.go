@@ -37,7 +37,7 @@ func TestDefaultStrategy(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			subReqMock := mocks.NewSubRequesterMock(tt.delay, tt.wantResult, tt.wantErr)
+			subReqMock := &mocks.SubRequesterMock{Delay: tt.delay, WantRes: tt.wantResult, WantErr: tt.wantErr}
 
 			strategy := NewDefaultStrategy(maxLatency)
 
@@ -57,26 +57,26 @@ func TestDefaultMultiStrategy(t *testing.T) {
 	}{
 		"success": {
 			subReqMocks: []SubRequester{
-				mocks.NewSubRequesterMock(maxLatency-maxLatency/2, "success", nil),
+				&mocks.SubRequesterMock{Delay: maxLatency - maxLatency/2, WantRes: "success"},
 			},
 			wantResult: "success",
 			wantErr:    nil,
 		},
 		"timeout": {
 			subReqMocks: []SubRequester{
-				mocks.NewSubRequesterMock(maxLatency/2, "", models.ErrTimeout),
+				&mocks.SubRequesterMock{Delay: maxLatency / 2, WantErr: models.ErrTimeout},
 			},
 			wantErr: models.ErrTimeout,
 		},
 		"client error": {
 			subReqMocks: []SubRequester{
-				mocks.NewSubRequesterMock(maxLatency-maxLatency/2, "", models.ErrClientError),
+				&mocks.SubRequesterMock{Delay: maxLatency - maxLatency/2, WantErr: models.ErrClientError},
 			},
 			wantErr: models.ErrClientError,
 		},
 		"server error": {
 			subReqMocks: []SubRequester{
-				mocks.NewSubRequesterMock(maxLatency-maxLatency/2, "", models.ErrServerError),
+				&mocks.SubRequesterMock{Delay: maxLatency - maxLatency/2, WantErr: models.ErrServerError},
 			},
 			wantErr: models.ErrServerError,
 		},

@@ -7,26 +7,20 @@ import (
 )
 
 type SubRequesterMock struct {
-	delay   time.Duration
-	wantRes string
-	wantErr error
-}
-
-func NewSubRequesterMock(delay time.Duration, wantRes string, wantErr error) *SubRequesterMock {
-	return &SubRequesterMock{
-		delay:   delay,
-		wantRes: wantRes,
-		wantErr: wantErr,
-	}
+	Delay      time.Duration
+	WantRes    string
+	WantErr    error
+	TotalCalls int64
 }
 
 func (m *SubRequesterMock) Request(ctx context.Context) (string, error) {
+	m.TotalCalls++
 	select {
-	case <-time.After(m.delay):
-		if m.wantErr != nil {
-			return "", m.wantErr
+	case <-time.After(m.Delay):
+		if m.WantErr != nil {
+			return "", m.WantErr
 		}
-		return m.wantRes, nil
+		return m.WantRes, nil
 	case <-ctx.Done():
 		return "", models.ErrTimeout
 	}

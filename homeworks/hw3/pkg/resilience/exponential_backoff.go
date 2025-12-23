@@ -47,7 +47,6 @@ func (b *ExponentialBackoff) Execute(subReq SubRequester) (string, error) {
 	for {
 		select {
 		case <-ctx.Done():
-		case <-ctx.Done():
 			return "", errors.New("context deadline exceeded")
 		default:
 			subCtx, subCancel := context.WithTimeout(ctx, b.maxSingleRequestLatency)
@@ -94,7 +93,7 @@ func (b *ExponentialBackoff) Execute(subReq SubRequester) (string, error) {
 				select {
 				case <-time.After(backoff):
 				case <-ctx.Done():
-					return "", errors.New("иbackoff timeout exceeded")
+					return "", errors.New("backoff timeout exceeded")
 				}
 			}
 		}
